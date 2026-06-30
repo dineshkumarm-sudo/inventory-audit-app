@@ -12,16 +12,16 @@ st.write("Upload your product export spreadsheet to run the metadata, bullet typ
 
 uploaded_file = st.file_uploader("Choose your Excel file (.xlsx)", type=["xlsx"])
 
-# Fully expanded lookup dictionary covering handgun, rifle, and shotgun load/bullet types
+# Comprehensive vocabulary compiled directly from your inventory title sets
+# Arranged longest to shortest to prevent partial matching errors
 BULLET_TYPES_VOCAB = [
-    # Standard Pistol / Rifle Acronyms
-    "FMJ", "CPHP", "JHP", "HP", "SP", "LRN", "TMJ", "OTM", "FMC", "BT", 
-    "SCHP", "SJHP", "JSP", "LHP", "FMJBT", "BTHP", "FTX", "VMAX", "V-MAX",
-    "MC", "AP", "Subsonic", "PSP", "RN",
-    # Shotgun & Specialty Loads (From your new categories)
-    "Gauge", "GA", "Bore", "Buckshot", "Shot", "Slug", "00 Buck", "00Buck",
-    # Rimfire / Calber Extensions
-    "LR", "Magnum", "WMR"
+    # Shotgun Shot & Slug Loads
+    "RIFLED SLUG", "00 BUCKSHOT", "00 BUCK", "000 BUCK", "4 BUCK", "BUCKSHOT", 
+    "SLUG", "LEAD SHOT", "STEEL SHOT", "STEEL", "LS", "LEAD", "SHORTS",
+    # Specialized Rifle & Handgun Projectiles
+    "FMJBT", "BTHP", "SCHP", "SJHP", "GDHP", "EFMJ", "FMJ", "CPHP", "JHP", 
+    "LRN", "TMJ", "OTM", "FMC", "JSP", "LHP", "FTX", "XTP", "VMAX", "V-MAX", 
+    "PSP", "SST", "TSX", "TTSX", "HP", "SP", "RN", "MC", "AP", "WC", "SWC"
 ]
 
 if uploaded_file is not None:
@@ -106,7 +106,7 @@ if uploaded_file is not None:
             desc_cell = ws.cell(row=row_idx, column=desc_col_idx)
             desc_text = str(desc_cell.value) if desc_cell.value else ""
             
-            # Metadata patterns parsing
+            # Extract metadata values
             brand_match = re.search(r'Brand:\s*<\/strong>\s*([^<]+)', desc_text, re.IGNORECASE)
             if not brand_match:
                 brand_match = re.search(r'Brand:.*?<\/strong>\s*([^<]+)', desc_text, re.IGNORECASE)
@@ -123,19 +123,26 @@ if uploaded_file is not None:
             if not mpn_match:
                 mpn_match = re.search(r'MPN:\s*([0-9a-zA-Z-]+)', desc_text, re.IGNORECASE)
                 
-            # Precision Bullet Acronym Extraction Logic
+            # ====================================================
+            # ISOLATION ENGINE FOR SHOTGUN / BULLET TYPE
+            # ====================================================
             extracted_bullet = ""
             title_prefix = title_text.split("-")[0].strip()
             
-            # Check vocabulary entries explicitly
-            found_bullets = [b for b in BULLET_TYPES_VOCAB if re.search(rf'\b{re.escape(b)}\b', title_prefix, re.IGNORECASE)]
+            # Clean calibers, gauges, weights, and brand to leave a pure projectile text block
+            filtered_prefix = re.sub(r'\b\d+\s*(?:Gauge|Ga|Bore|mm|GA)\b', '', title_prefix, flags=re.IGNORECASE)
+            filtered_prefix = re.sub(r'\b\.\d+\s*[a-zA-Z]*\b', '', filtered_prefix)  
+            filtered_prefix = re.sub(r'\b\d+(?:/\d+)?\s*(?:oz|Grain|gr)\b', '', filtered_prefix, flags=re.IGNORECASE)  
+            filtered_prefix = re.sub(rf'\b{re.escape(orig_brand)}\b', '', filtered_prefix, flags=re.IGNORECASE)  
+            
+            # Match directly against our updated matrix
+            found_bullets = [b for b in BULLET_TYPES_VOCAB if re.search(rf'\b{re.escape(b)}\b', filtered_prefix, re.IGNORECASE)]
             if found_bullets:
-                # Pick the match closest to the end of the title prefix
-                extracted_bullet = max(found_bullets, key=lambda b: title_prefix.upper().find(b.upper()))
+                extracted_bullet = found_bullets[0]  # Selects high-priority exact vocab match
             else:
-                # Fallback: Capture remaining acronym sequences if missing from dictionary
-                bullet_matches = re.findall(r'\b([A-Z]{2,4})\b', title_prefix)
-                bullet_filtered = [b for b in bullet_matches if b != orig_brand.upper() and b not in ["LR", "ACP", "GA"]]
+                # Dynamic fallback for standard acronym structures if missing from vocabulary
+                bullet_matches = re.findall(r'\b([A-Z]{2,4})\b', filtered_prefix)
+                bullet_filtered = [b for b in bullet_matches if b not in ["AMMO", "LR", "GA"]]
                 if bullet_filtered:
                     extracted_bullet = bullet_filtered[-1]
             
@@ -173,7 +180,7 @@ if uploaded_file is not None:
             if val_d_qty: ws.cell(row=row_idx, column=ext_d_qty_idx).value = int(val_d_qty)
             if val_p_rounds: ws.cell(row=row_idx, column=ext_p_rounds_idx).value = int(val_p_rounds)
 
-            # Metadata Engine cross-check evaluations
+            # Metadata Engine evaluation
             meta_comments = []
             if 'Brand' in headers and extracted_brand and orig_brand:
                 if extracted_brand.lower() != orig_brand.lower(): meta_comments.append(f"Brand Mismatch ({orig_brand} vs {extracted_brand})")
@@ -187,7 +194,7 @@ if uploaded_file is not None:
                 if extracted_mpn.lower() != orig_mpn.lower(): meta_comments.append(f"MPN Mismatch ({orig_mpn} vs {extracted_mpn})")
             elif extracted_mpn: meta_comments.append("MPN added from Desc")
                 
-            # Bullet validation cross-check string evaluation
+            # Bullet validation cross check
             if extracted_bullet:
                 if extracted_bullet.upper() in desc_text.upper():
                     meta_comments.append(f"Bullet Type ({extracted_bullet.upper()}): Validated")
@@ -203,7 +210,7 @@ if uploaded_file is not None:
             else:
                 ws.cell(row=row_idx, column=meta_comment_idx).value = "All Metadata Validated"
 
-            # Rounds Engine cross check evaluations
+            # Rounds Engine evaluation
             rounds_map = {"Title": val_t_rounds, "Quantity": val_d_qty, "Packaging": val_p_rounds}
             missing_rounds = [k for k, v in rounds_map.items() if not v]
             
