@@ -1,4 +1,4 @@
-
+%%writefile verification_app.py
 import streamlit as st
 import pandas as pd
 import re
@@ -12,11 +12,16 @@ st.write("Upload your product export spreadsheet to run the metadata, bullet typ
 
 uploaded_file = st.file_uploader("Choose your Excel file (.xlsx)", type=["xlsx"])
 
-# Broad lookup dictionary of common ammunition projectile/bullet types
+# Fully expanded lookup dictionary covering handgun, rifle, and shotgun load/bullet types
 BULLET_TYPES_VOCAB = [
+    # Standard Pistol / Rifle Acronyms
     "FMJ", "CPHP", "JHP", "HP", "SP", "LRN", "TMJ", "OTM", "FMC", "BT", 
     "SCHP", "SJHP", "JSP", "LHP", "FMJBT", "BTHP", "FTX", "VMAX", "V-MAX",
-    "MC", "AP", "Subsonic"
+    "MC", "AP", "Subsonic", "PSP", "RN",
+    # Shotgun & Specialty Loads (From your new categories)
+    "Gauge", "GA", "Bore", "Buckshot", "Shot", "Slug", "00 Buck", "00Buck",
+    # Rimfire / Calber Extensions
+    "LR", "Magnum", "WMR"
 ]
 
 if uploaded_file is not None:
@@ -122,15 +127,15 @@ if uploaded_file is not None:
             extracted_bullet = ""
             title_prefix = title_text.split("-")[0].strip()
             
-            # Method 1: Check vocabulary entries explicitly
+            # Check vocabulary entries explicitly
             found_bullets = [b for b in BULLET_TYPES_VOCAB if re.search(rf'\b{re.escape(b)}\b', title_prefix, re.IGNORECASE)]
             if found_bullets:
-                # Pick the match closest to the end of the prefix, as bullet types follow calibers
+                # Pick the match closest to the end of the title prefix
                 extracted_bullet = max(found_bullets, key=lambda b: title_prefix.upper().find(b.upper()))
             else:
-                # Method 2 Fallback: If not in vocab dictionary, extract remaining standard acronym blocks
+                # Fallback: Capture remaining acronym sequences if missing from dictionary
                 bullet_matches = re.findall(r'\b([A-Z]{2,4})\b', title_prefix)
-                bullet_filtered = [b for b in bullet_matches if b != orig_brand.upper() and b not in ["LR", "ACPC", "GA"]]
+                bullet_filtered = [b for b in bullet_matches if b != orig_brand.upper() and b not in ["LR", "ACP", "GA"]]
                 if bullet_filtered:
                     extracted_bullet = bullet_filtered[-1]
             
@@ -168,7 +173,7 @@ if uploaded_file is not None:
             if val_d_qty: ws.cell(row=row_idx, column=ext_d_qty_idx).value = int(val_d_qty)
             if val_p_rounds: ws.cell(row=row_idx, column=ext_p_rounds_idx).value = int(val_p_rounds)
 
-            # Metadata Engine cross check evaluations
+            # Metadata Engine cross-check evaluations
             meta_comments = []
             if 'Brand' in headers and extracted_brand and orig_brand:
                 if extracted_brand.lower() != orig_brand.lower(): meta_comments.append(f"Brand Mismatch ({orig_brand} vs {extracted_brand})")
@@ -182,7 +187,7 @@ if uploaded_file is not None:
                 if extracted_mpn.lower() != orig_mpn.lower(): meta_comments.append(f"MPN Mismatch ({orig_mpn} vs {extracted_mpn})")
             elif extracted_mpn: meta_comments.append("MPN added from Desc")
                 
-            # Bullet validation cross check string evaluation
+            # Bullet validation cross-check string evaluation
             if extracted_bullet:
                 if extracted_bullet.upper() in desc_text.upper():
                     meta_comments.append(f"Bullet Type ({extracted_bullet.upper()}): Validated")
