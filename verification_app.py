@@ -1,4 +1,4 @@
-
+%%writefile verification_app.py
 import streamlit as st
 import pandas as pd
 import re
@@ -12,16 +12,13 @@ st.write("Upload your product export spreadsheet to run the metadata, bullet typ
 
 uploaded_file = st.file_uploader("Choose your Excel file (.xlsx)", type=["xlsx"])
 
-# Comprehensive vocabulary compiled directly from your inventory title sets
-# Arranged longest to shortest to prevent partial matching errors
+# Priority Matrix arranged from longest string to shortest string
 BULLET_TYPES_VOCAB = [
-    # Shotgun Shot & Slug Loads
     "RIFLED SLUG", "00 BUCKSHOT", "00 BUCK", "000 BUCK", "4 BUCK", "BUCKSHOT", 
-    "SLUG", "LEAD SHOT", "STEEL SHOT", "STEEL", "LS", "LEAD", "SHORTS",
-    # Specialized Rifle & Handgun Projectiles
-    "FMJBT", "BTHP", "SCHP", "SJHP", "GDHP", "EFMJ", "FMJ", "CPHP", "JHP", 
-    "LRN", "TMJ", "OTM", "FMC", "JSP", "LHP", "FTX", "XTP", "VMAX", "V-MAX", 
-    "PSP", "SST", "TSX", "TTSX", "HP", "SP", "RN", "MC", "AP", "WC", "SWC"
+    "SLUG", "LEAD SHOT", "STEEL SHOT", "STEEL", "FMJBT", "BTHP", "SCHP", "SJHP", 
+    "GDHP", "EFMJ", "FMJ", "CPHP", "JHP", "LRN", "TMJ", "OTM", "FMC", "JSP", 
+    "LHP", "FTX", "XTP", "VMAX", "V-MAX", "PSP", "SST", "TSX", "TTSX", "HP", 
+    "SP", "RN", "MC", "AP", "WC", "SWC", "LS", "LEAD", "SHORTS"
 ]
 
 if uploaded_file is not None:
@@ -124,25 +121,27 @@ if uploaded_file is not None:
                 mpn_match = re.search(r'MPN:\s*([0-9a-zA-Z-]+)', desc_text, re.IGNORECASE)
                 
             # ====================================================
-            # ISOLATION ENGINE FOR SHOTGUN / BULLET TYPE
+            # BOUNDARY-LESS SUBSTRING EXTRACTION PIPELINE
             # ====================================================
             extracted_bullet = ""
             title_prefix = title_text.split("-")[0].strip()
             
-            # Clean calibers, gauges, weights, and brand to leave a pure projectile text block
-            filtered_prefix = re.sub(r'\b\d+\s*(?:Gauge|Ga|Bore|mm|GA)\b', '', title_prefix, flags=re.IGNORECASE)
-            filtered_prefix = re.sub(r'\b\.\d+\s*[a-zA-Z]*\b', '', filtered_prefix)  
-            filtered_prefix = re.sub(r'\b\d+(?:/\d+)?\s*(?:oz|Grain|gr)\b', '', filtered_prefix, flags=re.IGNORECASE)  
-            filtered_prefix = re.sub(rf'\b{re.escape(orig_brand)}\b', '', filtered_prefix, flags=re.IGNORECASE)  
+            # 1. Strip away core brand descriptors to avoid substring false flags
+            filtered_prefix = re.sub(rf'{re.escape(orig_brand)}', '', title_prefix, flags=re.IGNORECASE)
             
-            # Match directly against our updated matrix
-            found_bullets = [b for b in BULLET_TYPES_VOCAB if re.search(rf'\b{re.escape(b)}\b', filtered_prefix, re.IGNORECASE)]
+            # 2. Convert to upper case to make text searches entirely bulletproof
+            filtered_upper = filtered_prefix.upper()
+            
+            # 3. Check for specific substring pattern presence sequentially (no hard \b boundaries)
+            found_bullets = [b for b in BULLET_TYPES_VOCAB if b in filtered_upper]
+            
             if found_bullets:
-                extracted_bullet = found_bullets[0]  # Selects high-priority exact vocab match
+                # Prioritize whichever valid vocabulary match sits closest to the hyphen partition point
+                extracted_bullet = max(found_bullets, key=lambda b: filtered_upper.find(b))
             else:
-                # Dynamic fallback for standard acronym structures if missing from vocabulary
-                bullet_matches = re.findall(r'\b([A-Z]{2,4})\b', filtered_prefix)
-                bullet_filtered = [b for b in bullet_matches if b not in ["AMMO", "LR", "GA"]]
+                # Dynamic fallback if still missing from vocabulary matrix
+                bullet_matches = re.findall(r'([A-Z]{2,4})', filtered_upper)
+                bullet_filtered = [b for b in bullet_matches if b not in ["AMMO", "LR", "GA", "A"]]
                 if bullet_filtered:
                     extracted_bullet = bullet_filtered[-1]
             
